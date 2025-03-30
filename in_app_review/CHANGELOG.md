@@ -1,3 +1,8 @@
+# [2.0.11]
+
+- Add Windows support for in-app reviews using `RequestRateAndReviewAppAsync` API
+- Implement `isAvailable()` and `requestReview()` for Windows
+
 # [2.0.10]
 
 - Add a privacy manifest to iOS and MacOS.

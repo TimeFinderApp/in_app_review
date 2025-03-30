@@ -8,7 +8,7 @@
 
 A Flutter plugin that lets you show a review pop up where users can leave a review for your app without needing to close your app. Alternatively, you can open your store listing via a deep link.
 
-It uses the [In-App Review](https://developer.android.com/guide/playcore/in-app-review) API on Android and the [SKStoreReviewController](https://developer.apple.com/documentation/storekit/skstorereviewcontroller) on iOS/MacOS.
+It uses the [In-App Review](https://developer.android.com/guide/playcore/in-app-review) API on Android, the [SKStoreReviewController](https://developer.apple.com/documentation/storekit/skstorereviewcontroller) on iOS/MacOS, and the [StoreContext.RequestRateAndReviewAppAsync](https://learn.microsoft.com/en-us/uwp/api/windows.services.store.storecontext.requestrateandreviewappasync) API on Windows.
 
 # Usage
 
@@ -96,20 +96,27 @@ Note that `requestReview()` will do **nothing** when testing via TestFlight [as 
 
 Similarly to Android, real reviews can only created when `requestReview()` is used in production. The **submit** button is disabled when testing locally to emphasize this.
 
-
 `openStoreListing()` can only be tested with a physical device as the iOS simulator does not have the App Store installed.
 
 ## MacOS
 
 This plugin can be tested by running your MacOS application locally.
 
+## Windows
+
+`requestReview()` can be tested by running your Windows application locally, but will only work if the app is installed from the Microsoft Store. It will not work in development builds or sideloaded applications.
+
+`isAvailable()` will return true only if the app is running on Windows 10 version 1809 or higher and is installed from the Microsoft Store.
+
+`openStoreListing()` requires a valid `microsoftStoreId` parameter.
+
 # Cross Platform Compatibility
 
 | Function             | Android | iOS | MacOS | Windows |
-|----------------------|---------|-----|-------|--------------|
-| `isAvailable()`      | ✅       | ✅   | ✅     | ❌            |
-| `requestReview()`    | ✅       | ✅   | ✅     | ❌            |
-| `openStoreListing()` | ✅       | ✅   | ✅     | ✅            |
+| -------------------- | ------- | --- | ----- | ------- |
+| `isAvailable()`      | ✅      | ✅  | ✅    | ✅      |
+| `requestReview()`    | ✅      | ✅  | ✅    | ✅      |
+| `openStoreListing()` | ✅      | ✅  | ✅    | ✅      |
 
 # Requirements
 
@@ -124,5 +131,9 @@ Requires iOS version 10.3
 ## MacOS
 
 Requires MacOS version 10.14
+
+## Windows
+
+Requires Windows 10 version 1809 (10.0.17763.0) or higher and the app must be installed from the Microsoft Store.
 
 Issues & pull requests are more than welcome!
