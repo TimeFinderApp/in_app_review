@@ -55,18 +55,31 @@ namespace in_app_review
 
     // Helper function to check if app is installed from Microsoft Store
     winrt::fire_and_forget CheckIfInstalledFromStore(
-        std::function<void(bool)> callback)
+        std::function<void(bool, std::string)> callback)
     {
         try
         {
             StoreContext storeContext = StoreContext::GetDefault();
+            
+            if (!storeContext)
+            {
+                callback(false, "STORE_API_UNAVAILABLE");
+                return;
+            }
+            
             auto license = co_await storeContext.GetAppLicenseAsync();
             bool isFromStore = !license.SkuStoreId().empty();
-            callback(isFromStore);
+            callback(isFromStore, "");
+        }
+        catch (winrt::hresult_error const& ex)
+        {
+            std::ostringstream errorStream;
+            errorStream << "WINRT_ERROR: " << std::hex << ex.code() << " - " << winrt::to_string(ex.message());
+            callback(false, errorStream.str());
         }
         catch (...)
         {
-            callback(false);
+            callback(false, "UNKNOWN_ERROR");
         }
     }
 
@@ -77,7 +90,20 @@ namespace in_app_review
         try
         {
             StoreContext storeContext = StoreContext::GetDefault();
+            
+            if (!storeContext)
+            {
+                callback(false, "STORE_API_UNAVAILABLE");
+                return;
+            }
+            
             auto reviewResult = co_await storeContext.RequestRateAndReviewAppAsync();
+
+            if (!reviewResult)
+            {
+                callback(false, "NULL_REVIEW_RESULT");
+                return;
+            }
 
             bool success = false;
             std::string errorMsg = "";
@@ -94,15 +120,21 @@ namespace in_app_review
                 errorMsg = "NETWORK_ERROR";
                 break;
             default:
-                errorMsg = "STORE_ERROR";
+                errorMsg = "STORE_ERROR_" + std::to_string(static_cast<int>(reviewResult.Status()));
                 break;
             }
 
             callback(success, errorMsg);
         }
+        catch (winrt::hresult_error const& ex)
+        {
+            std::ostringstream errorStream;
+            errorStream << "WINRT_ERROR: " << std::hex << ex.code() << " - " << winrt::to_string(ex.message());
+            callback(false, errorStream.str());
+        }
         catch (...)
         {
-            callback(false, "NATIVE_ERROR");
+            callback(false, "UNKNOWN_ERROR");
         }
     }
 
@@ -110,43 +142,69 @@ namespace in_app_review
         const flutter::MethodCall<flutter::EncodableValue> &method_call,
         std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result)
     {
-        if (method_call.method_name() == "isAvailable")
+        try 
         {
-            // First check if Windows version is compatible
-            if (!IsWindowsVersionCompatible())
+            if (method_call.method_name() == "isAvailable")
             {
-                result->Success(flutter::EncodableValue(false));
-                return;
-            }
-
-            // Then check if app is installed from Microsoft Store
-            CheckIfInstalledFromStore([result = result.release()](bool isAvailable)
-                                      {
-      std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> resultPtr(
-          static_cast<flutter::MethodResult<flutter::EncodableValue> *>(result));
-      resultPtr->Success(flutter::EncodableValue(isAvailable)); });
-        }
-        else if (method_call.method_name() == "requestReview")
-        {
-            // Must be called from UI thread for Windows Store API
-            RequestInAppReview(
-                [result = result.release()](bool success, std::string errorMsg)
+                // First check if Windows version is compatible
+                if (!IsWindowsVersionCompatible())
                 {
-                    std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> resultPtr(
-                        static_cast<flutter::MethodResult<flutter::EncodableValue> *>(result));
-                    if (success)
+                    result->Success(flutter::EncodableValue(false));
+                    return;
+                }
+
+                // Then check if app is installed from Microsoft Store
+                CheckIfInstalledFromStore(
+                    [result = result.release()](bool isAvailable, std::string errorMsg)
                     {
-                        resultPtr->Success();
-                    }
-                    else
+                        std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> resultPtr(
+                            static_cast<flutter::MethodResult<flutter::EncodableValue> *>(result));
+                        
+                        if (!errorMsg.empty()) {
+                            resultPtr->Error("WINDOWS_STORE_ERROR", errorMsg);
+                            return;
+                        }
+                        
+                        resultPtr->Success(flutter::EncodableValue(isAvailable));
+                    });
+            }
+            else if (method_call.method_name() == "requestReview")
+            {
+                // First check if Windows version is compatible
+                if (!IsWindowsVersionCompatible())
+                {
+                    result->Error("VERSION_ERROR", "Windows version is not compatible");
+                    return;
+                }
+                
+                // Must be called from UI thread for Windows Store API
+                RequestInAppReview(
+                    [result = result.release()](bool success, std::string errorMsg)
                     {
-                        resultPtr->Error(errorMsg);
-                    }
-                });
+                        std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> resultPtr(
+                            static_cast<flutter::MethodResult<flutter::EncodableValue> *>(result));
+                        if (success)
+                        {
+                            resultPtr->Success();
+                        }
+                        else
+                        {
+                            resultPtr->Error("WINDOWS_REVIEW_ERROR", errorMsg);
+                        }
+                    });
         }
         else
         {
             result->NotImplemented();
+        }
+        }
+        catch (const std::exception& e) 
+        {
+            result->Error("EXCEPTION", std::string("C++ exception: ") + e.what());
+        }
+        catch (...) 
+        {
+            result->Error("EXCEPTION", "Unknown C++ exception occurred");
         }
     }
 
